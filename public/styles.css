@@ -1,0 +1,22 @@
+/* Beispiel CSS für die Variable Font */
+@font-face {
+    font-family: 'Cairo-VariableFont';
+    src: url('/fonts/Cairo/Cairo.ttf') format('truetype');
+    font-weight: 1 1000; /* Gewichtsachse von 1 (Normal) bis 1000 (Fett) */
+    font-style: oblique 0deg 10deg; /* Schrägungsachse von 0deg bis 10deg */
+  }
+  
+  body {
+    font-family: 'Cairo-VariableFont', sans-serif;
+    background-color: #F0DCC8;
+  }
+  h1 {
+    font-size: 40px;
+    color: #355C2E;
+    text-align: center;
+  }
+  #map{
+    height: 800px;
+    width: 100%;
+    border-radius: 20px;
+  }

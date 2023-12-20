@@ -1,0 +1,92 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Application</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>Clima Canves</h1>
+    <div id="map"></div>
+    <script>
+        var map = L.map('map').setView([51.505, -0.09], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: ''
+        }).addTo(map);
+
+        /* var circle = L.circle([51.505, -0.09], {
+            color: '#355C2E',     // Border-Farbe
+            fillColor: '#eb991e', // Füll-Farbe
+            fillOpacity: 0.8,  // Füll-Deckkraft (0 bis 1)
+            radius: getDynamicRadius(map.getZoom())        // Radius des Kreises in Metern
+        }).addTo(map);
+
+        // Event-Listener für Änderungen im Zoom-Level
+        map.on('zoomend', function() {
+            // Aktualisiere den Radius des Kreises basierend auf dem neuen Zoom-Level
+            circle.setRadius(getDynamicRadius(map.getZoom()));
+        }); */
+        // Funktion, um den dynamischen Radius zu berechnen
+        function getDynamicRadius(zoomLevel) {
+        // Hier kannst du eine Formel oder Logik verwenden, um den Radius basierend auf dem Zoom-Level zu berechnen
+        // Ein einfaches Beispiel: je höher der Zoom-Level, desto kleiner der Radius
+            return Math.max(Math.pow(2, 13 - zoomLevel) * 100, 5000);
+        }
+
+        var csvFilePath = './data/GlobalLandTemperaturesByCity.csv';
+
+        console.log("Start PaPa");
+
+        Papa.parse(csvFilePath, {
+            download: true,
+            header: true,
+            complete: function(results) {
+                // Extrahiere eindeutige Staaten
+                console.log("Start PaPa2");
+                var uniqueStates = [...new Set(results.data.map(item => item.Country))];
+                console.log("Got unique states");
+                // Iteriere durch die eindeutigen Staaten und füge Kreise hinzu
+                uniqueStates.forEach(function(state) {
+                    // Filtere Daten für den aktuellen Staat
+                    console.log("Start drawing circles");
+                    var stateData = results.data.filter(item => item.Country === state);
+
+                    // Berechne den Durchschnitt der Latituden und Longituden für den Staat
+                    var avgLatitude = stateData.reduce((sum, item) => sum + parseFloat(item.Latitude), 0) / stateData.length;
+                    var avgLongitude = stateData.reduce((sum, item) => sum + parseFloat(item.Longitude), 0) / stateData.length;
+
+                    // Füge einen Kreis für den Staat hinzu
+                    var stateCircle = L.circle([avgLatitude, avgLongitude], {
+                        color: '#355C2E',
+                        fillColor: '#eb991e',
+                        fillOpacity: 0.5,
+                        radius: 50000 // Beispiel-Radius, den du anpassen kannst
+                    }).addTo(map);
+
+                    map.on('zoomend', function() {
+                        // Aktualisiere den Radius des Kreises basierend auf dem neuen Zoom-Level
+                        stateCircle.setRadius(getDynamicRadius(map.getZoom()));
+                    });
+
+                    // Popup hinzufügen (optional)
+                    stateCircle.bindPopup(state);
+                });
+            }
+        });
+        
+        //ZOOM BUTTON BOTTOM RIGHT and REMOVE TOP LEFT
+        map.zoomControl.remove();
+        L.control.zoom({
+            position: 'bottomright'
+        }).addTo(map);
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
+
