@@ -9,12 +9,60 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="quadtree.js"></script>
 </head>
 <body>
     <h1>Clima Canves</h1>
+    
+    <div id="slider-container">
+        <span id="slider-label">Year-Month:</span>
+        <input type="range" id="display-slider" min="0" max="3238" step="1" value="0">
+        <span id="current-display-value">1743-11</span>
+    </div>
+
     <div id="map"></div>
     <script>
         var map = L.map('map').setView([51.505, -0.09], 13);
+
+        function interpolateColor(temperature) {
+
+            if (temperature === undefined || temperature === "x") {
+                return 'rgb(0, 0, 0)';
+            }
+            // Bereich der Temperaturen festlegen
+            const minTemperature = -40;
+            const maxTemperature = 60;
+
+            // Begrenze den Temperaturwert auf den zulässigen Bereich
+            const clampedTemperature = Math.max(minTemperature, Math.min(temperature, maxTemperature));
+
+            // Bereich der Farben festlegen
+            const minColor = [0, 0, 255]; // Dunkelblau
+            const midColor = [14, 247, 10]; // Grün
+            const maxColor = [255, 0, 0]; // Rot
+
+            // Interpolation berechnen
+            const ratio = (clampedTemperature - minTemperature) / (maxTemperature - minTemperature);
+            const interpolatedColor = interpolateNonLinear(minColor, midColor, maxColor, ratio);
+
+            return `rgb(${interpolatedColor[0]}, ${interpolatedColor[1]}, ${interpolatedColor[2]})`;
+        }
+
+        // Hilfsfunktion zur linearen Interpolation zwischen zwei RGB-Farben
+        function interpolateNonLinear(color1, color2, color3, t) {
+            // Verwende eine nicht-lineare Interpolation, zum Beispiel eine quadratische Interpolation
+            const invT = 1 - t;
+            const t2 = t * t;
+            const invT2 = invT * invT;
+
+            const result = [
+                Math.round(color1[0] * invT2 + color2[0] * 2 * invT * t + color3[0] * t2),
+                Math.round(color1[1] * invT2 + color2[1] * 2 * invT * t + color3[1] * t2),
+                Math.round(color1[2] * invT2 + color2[2] * 2 * invT * t + color3[2] * t2),
+            ];
+
+            return result;
+        }
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: ''
@@ -36,23 +84,50 @@
         function getDynamicRadius(zoomLevel) {
         // Hier kannst du eine Formel oder Logik verwenden, um den Radius basierend auf dem Zoom-Level zu berechnen
         // Ein einfaches Beispiel: je höher der Zoom-Level, desto kleiner der Radius
-            return Math.max(Math.pow(2, 13 - zoomLevel) * 100, 5000);
+            console.log(Math.max(Math.pow(2, 13 - zoomLevel) * 100, 5000));
+            console.log(Math.max(Math.pow(2, 20 - zoomLevel) * 100, 5000));
+            return Math.max(Math.pow(2, 14 - zoomLevel) * 100, 5000);
         }
 
-        var csvFilePath = './data/GlobalLandTemperaturesByCity.csv';
+        const displaySlider = document.getElementById('display-slider');
+        const displayValueLabel = document.getElementById('current-display-value');
+
+        
+
+        const quadtreeBounds = { x: -180, y: -90, width: 360, height: 180 };
+        const maxPointsPerQuadtreeNode = 16;
+        const quadtree = new QuadtreeNode(quadtreeBounds, maxPointsPerQuadtreeNode);
+
+        const startDate = new Date('1743-11-01');
+
+        var csvFilePath = './data/pivot_df_melted.csv';
 
         console.log("Start PaPa");
+
+        const results = [];
 
         Papa.parse(csvFilePath, {
             download: true,
             header: true,
             complete: function(results) {
+                console.log(results);
+                for (const item of results.data) {
+                    const latitude = parseFloat(item['Latitude']);
+                    const longitude = parseFloat(item['Longitude']);
+                    const city = item['City'];
+                    const temperatures_str = item['Temperature'];
+                    const parsedArray = JSON.parse(temperatures_str.replace(/'/g, '"').replace(/undefined/g, 'null'));
+                    const temperatures = parsedArray.map(value => {
+                        return (value === 'x') ? undefined : value;
+                    });
+                    quadtree.insert({ latitude, longitude, city, temperatures });
+                }
                 // Extrahiere eindeutige Staaten
-                console.log("Start PaPa2");
-                var uniqueStates = [...new Set(results.data.map(item => item.Country))];
-                console.log("Got unique states");
+                //console.log("Start PaPa2");
+                //var uniqueStates = [...new Set(results.data.map(item => item))];
+                //console.log("Got unique states");
                 // Iteriere durch die eindeutigen Staaten und füge Kreise hinzu
-                uniqueStates.forEach(function(state) {
+                /*uniqueStates.forEach(function(state) {
                     // Filtere Daten für den aktuellen Staat
                     console.log("Start drawing circles");
                     var stateData = results.data.filter(item => item.Country === state);
@@ -65,7 +140,7 @@
                     var stateCircle = L.circle([avgLatitude, avgLongitude], {
                         color: '#355C2E',
                         fillColor: '#eb991e',
-                        fillOpacity: 0.5,
+                        fillOpacity: 0.5,getLatLng
                         radius: 50000 // Beispiel-Radius, den du anpassen kannst
                     }).addTo(map);
 
@@ -76,9 +151,129 @@
 
                     // Popup hinzufügen (optional)
                     stateCircle.bindPopup(state);
-                });
+                });*/
+
+
+                const pointLayerGroup = L.layerGroup().addTo(map);
+
+                displaySlider.addEventListener('input', function() {
+                    const selectedValue =  parseInt(displaySlider.value);
+
+                    const currentDate = new Date(startDate);
+                    currentDate.setMonth(startDate.getMonth() + selectedValue);
+
+                    // Extrahiere das Jahr und den Monat
+                    const year = currentDate.getFullYear();
+                    const month = currentDate.getMonth() + 1; // Monate sind nullbasiert, daher +1
+
+                    // Aktualisiere die Anzeige
+                    displayValueLabel.textContent = `${year}-${month.toString().padStart(2, '0')}`;
+
+
+                    pointLayerGroup.eachLayer(layer => {
+                        if (layer instanceof L.Circle) {
+                            const point = layer.options; // Zugriff auf das ursprüngliche point-Objekt
+                            const temperature = point.temperatures[displaySlider.value];
+                            const color = interpolateColor(temperature);
+                            layer.setStyle({fillColor: color });
+                            layer.setPopupContent(getPopupContent(point));
+                        }
+                    });
+                })
+
+                function addPointsToLayerGroup(points) {
+                    pointLayerGroup.clearLayers(); // Entferne alle vorhandenen Layer
+
+                    points.forEach(point => {
+                        const { latitude, longitude, city, temperatures } = point;
+
+                        const radius = getDynamicRadius(map.getZoom());
+
+                        const color = interpolateColor(temperatures[displaySlider.value]);
+
+                        const circle = L.circle([latitude, longitude], {
+                            color: '#355C2E',
+                            fillColor: color,
+                            fillOpacity: 0.8,
+                            radius: radius, // Beispiel-Radius, den du anpassen kannst
+                            city: city,
+                            temperatures: temperatures
+                        });
+
+
+                        circle.bindPopup(getPopupContent(point), { className: 'custom-popup' }).on('mouseover', function (e) {
+                            this.openPopup();
+                        }).on('mouseout', function (e) {
+                            this.closePopup();
+                        });
+
+
+                        // Füge den Kreis zur LayerGroup hinzu
+                        pointLayerGroup.addLayer(circle);
+                    });
+                }
+
+                function getPopupContent(point) {
+                    const sliderValue = document.getElementById('display-slider').value;
+                    const temperature = point.temperatures[sliderValue];
+
+                    return `
+                        <div>${point.city}</div>
+                        <div>Temperatur: ${temperature}°C</div> 
+                    `;
+                }
+
+                function getRandomSubset(points, maxCount) {
+                    const shuffledPoints = points.slice().sort(() => Math.random() - 0.5);
+                    return shuffledPoints.slice(0, Math.min(maxCount, shuffledPoints.length));
+                }
+
+                function getEvenlyDistributedPoints(points, maxCount) {
+                    const distributedPoints = [];
+                    const step = Math.ceil(points.length / maxCount);
+
+                    for (let i = 0; i < points.length; i += step) {
+                        distributedPoints.push(points[i]);
+                    }
+
+                    return distributedPoints;
+                }
+
+                function updatePointsOnMove() {
+                    // Erhalte die Grenzen (Bounds) der aktuellen Ansicht
+                    const bounds = map.getBounds();
+
+                    // Extrahiere die Koordinaten der Grenzen
+                    const southWest = bounds.getSouthWest(); // Südwest-Koordinate
+                    const northEast = bounds.getNorthEast(); // Nordost-Koordinate
+
+                    // Beispiel: Erstelle ein Rechteck mit den Grenzen
+                    const searchRange = {
+                        x: southWest.lng,
+                        y: southWest.lat,
+                        width: northEast.lng - southWest.lng,
+                        height: northEast.lat - southWest.lat
+                    };
+
+                    // Führe die Abfrage im Quadtree mit den aktualisierten Koordinaten durch
+                    const pointsInSearchRange = [];
+                    quadtree.queryRange(searchRange, pointsInSearchRange);
+
+                    // Begrenze die Anzahl der Punkte auf maximal 50
+                    const evenlyDistributedPoints = getEvenlyDistributedPoints(pointsInSearchRange, 50);
+
+                    // Füge die Punkte zur LayerGroup hinzu
+                    addPointsToLayerGroup(evenlyDistributedPoints);
+
+                    // Aktualisiere den Radius des Kreises basierend auf dem neuen Zoom-Level
+                    console.log("Update points on move");
+                }
+
+                map.on('moveend', updatePointsOnMove);
+                console.log("Start drawing circles");
             }
         });
+
         
         //ZOOM BUTTON BOTTOM RIGHT and REMOVE TOP LEFT
         map.zoomControl.remove();
