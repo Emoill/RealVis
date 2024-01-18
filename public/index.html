@@ -266,21 +266,11 @@
                 });
 
 
-                function initializePoints() {
-                    // Correctly retrieve points from the quadtree (if needed, adjust this part)
-                    const allPoints = [];
-                    quadtree.each(point => {
-                        allPoints.push(point);
-                    });
-                    const evenlyDistributedPoints = getEvenlyDistributedPoints(allPoints, 50);
-                    addPointsToLayerGroup(evenlyDistributedPoints);
-                }
-
                 map.on('moveend', updatePointsOnMove);
                 //map.on('zoomend', updateHeatmap);
                 console.log("Start drawing circles");
 
-                initializePoints();
+                
                 updatePointsOnMove()
             }
         });
